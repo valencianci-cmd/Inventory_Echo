@@ -203,6 +203,22 @@
   </div>
 
   <script>
+    // ===== iOS PWA keyboard fix =====
+const IS_IOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+const IS_TOUCH = 'ontouchstart' in window;
+
+if (IS_IOS && IS_TOUCH) {
+  window.addEventListener('load', () => {
+    const skuScan = document.getElementById('cbSmartScanSKU');
+    const serScan = document.getElementById('cbSmartScanSER');
+    const enterScan = document.getElementById('cbEnterAsScan');
+
+    if (skuScan) skuScan.checked = false;
+    if (serScan) serScan.checked = false;
+    if (enterScan) enterScan.checked = false;
+  });
+}
+
     // ===== Echo Inventory v4.5.4 =====
     const STATE_KEY = 'echo_inventory_state_v454';
 
@@ -528,7 +544,7 @@
       if (id('cbResetQty').checked) id('qty').value = 1;
       if (!state.sticky.lockNote) id('note').value = '';
       if (!state.sticky.lockLoc) { id('locRow').value=''; id('locBin').value=''; id('locWh').value=''; }
-      id('sku').focus();
+      if (!IS_IOS) id('sku').focus();
     }
     function validateRow(row) {
       if (!row.sku) { showMsg('Missing SKU'); return false; }
