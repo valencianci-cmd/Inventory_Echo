@@ -222,6 +222,8 @@ if (IS_IOS && IS_TOUCH) {
 let scanBurst = 0;
 let lastCharTs = 0;
 let scannerLikely = false;
+    let lastPostWasScanner = false;
+
 let scannerTimer = null;
 
 function markScannerChar() {
@@ -724,10 +726,20 @@ id('serial').addEventListener('keydown', (e) => {
   if (e.key && e.key.length === 1) markScannerChar();
 
   if (e.key === 'Enter' && scannerLikely) {
-    e.preventDefault();
-    id('qty').focus();
-    if (!IS_IOS) id('qty').select();
+  e.preventDefault();
+  lastPostWasScanner = true;
+
+  if (id('tracking').value === 'ser') {
+    postByMode();   // AUTO-POST
     return;
+  }
+
+  // fallback for non-serialized
+  id('qty').focus();
+  if (!IS_IOS) id('qty').select();
+  return;
+}
+
   }
 
   handleAdvance(e, 'serial');
