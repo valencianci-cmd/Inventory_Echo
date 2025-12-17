@@ -1,0 +1,834 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Echo Inventory v4.5.4 (Mobile/PWA)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  
+  <!-- PWA / Mobile install -->
+  <meta name="theme-color" content="#0b1f3a" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Echo Inventory" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="icons/icon-192.png" />
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png" />
+  <link rel="icon" type="image/png" sizes="512x512" href="icons/icon-512.png" />
+<style>
+    body { font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial; margin: 20px; }
+    .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .col { display: flex; flex-direction: column; gap: 6px; }
+    input, select, button { padding: 8px; font-size: 14px; }
+    button { cursor: pointer; }
+    table { border-collapse: collapse; width: 100%; margin-top: 12px; }
+    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; vertical-align: middle; }
+    th { background: #f4f4f4; }
+    .badge { opacity: .6; transition: opacity .25s; font-size: 12px; }
+    .group { border: 1px solid #e5e5e5; padding: 12px; border-radius: 8px; margin-bottom: 16px; }
+    .muted { color: #666; font-size: 12px; }
+    .pill { padding: 2px 8px; border-radius: 999px; background: #eef; border: 1px solid #cde; font-size: 12px; }
+    .danger { background: #ffecec; border-color: #ffbdbd; }
+    .warn { background: #fff9ec; border-color: #ffe0a3; }
+    label.inline { display:flex; align-items:center; gap:6px; font-size:13px; }
+    .hide { display:none; }
+    .msg-ok { color: #0a7; }
+    .msg-warn { color: #c60; }
+    .right { margin-left: auto; }
+    .subtle { font-size:12px; color:#666; }
+    .btn-small { padding: 6px 8px; font-size: 12px; }
+    .num-small { width: 90px; padding: 6px 8px; font-size: 13px; }
+    .tabs { display:flex; gap:8px; margin-bottom:8px; }
+    .tabs button { padding: 6px 10px; font-size: 13px; }
+    .tab-active { background:#eef; border:1px solid #cde; border-radius:8px; }
+  </style>
+</head>
+<body>
+  <h1>Echo Inventory <span class="pill">v4.5.4</span></h1>
+  <div class="muted">Fixes CSV export & cost import. Remaining CSV now includes a <b>Value</b> column.</div>
+
+  <div class="group">
+    <div class="row">
+      <label class="inline"><input id="cbAutoAdvance" type="checkbox" checked /> Auto-advance on Enter/Tab</label>
+      <label class="inline"><input id="cbSmartScanSKU" type="checkbox" checked /> Smart Scan (SKU)</label>
+      <label class="inline"><input id="cbSmartScanSER" type="checkbox" checked /> Smart Scan (Serial)</label>
+      <label class="inline"><input id="cbEnterAsScan" type="checkbox" checked /> Treat Enter as scan end</label>
+      <label class="inline"><input id="cbResetQty" type="checkbox" checked /> Reset Qty to 1 after post</label>
+      <span id="saveBadge" class="badge">Saved</span>
+      <span id="msg" class="badge"></span>
+    </div>
+
+    <!-- Sticky Location + PO strip -->
+    <div class="row" style="margin-top:10px;">
+      <div class="col">
+        <label>Row</label>
+        <input id="locRow" placeholder="Scan/enter Row" />
+      </div>
+      <div class="col">
+        <label>Bin</label>
+        <input id="locBin" placeholder="Scan/enter Bin" />
+      </div>
+      <div class="col">
+        <label>Warehouse</label>
+        <input id="locWh" placeholder="Scan/enter Warehouse" />
+      </div>
+      <div class="col" style="flex:1 1 220px">
+        <label>Note (PO / order #)</label>
+        <input id="note" placeholder="PO, order #, etc." />
+      </div>
+      <div class="col">
+        <label class="inline"><input id="cbLockLoc" type="checkbox" checked /> Lock Location</label>
+        <span class="subtle">Row/Bin/Wh stay after post</span>
+      </div>
+      <div class="col">
+        <label class="inline"><input id="cbLockNote" type="checkbox" /> Lock Note</label>
+        <span class="subtle">PO stays after post</span>
+      </div>
+    </div>
+
+    <div class="row" style="margin-top:10px;">
+      <div class="col">
+        <label>Tracking</label>
+        <select id="tracking">
+          <option value="non">Non-serialized</option>
+          <option value="ser">Serialized</option>
+        </select>
+      </div>
+      <div class="col" id="autoPostOptions">
+        <label>Auto-post rule</label>
+        <select id="autoPostRule">
+          <option value="none">None</option>
+          <option value="afterSku">Auto-post after SKU (non-serialized)</option>
+          <option value="afterSerial">Auto-post after Serial (serialized)</option>
+        </select>
+      </div>
+      <div class="col">
+        <label>Mode</label>
+        <select id="postMode">
+          <option value="incoming">Incoming</option>
+          <option value="outgoing">Outgoing</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="row" style="margin-top:10px;">
+      <div class="col">
+        <label>SKU</label>
+        <input id="sku" placeholder="Scan or type SKU" autofocus />
+      </div>
+      <div class="col" id="serialCol">
+        <label>Serial (optional)</label>
+        <input id="serial" placeholder="Scan or type serial (if serialized)" />
+      </div>
+      <div class="col">
+        <label>Qty</label>
+        <input id="qty" type="number" step="1" value="1" />
+      </div>
+      <div class="col" style="align-self:flex-end;">
+        <button id="btnPost">Post</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="group">
+    <div class="row">
+      <button id="btnSave">Save</button>
+      <button id="btnLoad">Load</button>
+      <button id="btnDownloadBackup">Export Backup (JSON)</button>
+      <label class="pill">
+        Restore
+        <input id="fileRestore" type="file" accept="application/json" style="display:none;" />
+      </label>
+      <button id="btnExportCSV">Export Remaining (CSV)</button>
+      <button id="btnExportMoves">Export Movements (CSV)</button>
+      <label class="pill">
+        Import Cost CSV
+        <input id="fileImportCost" type="file" accept=".csv,text/csv" style="display:none;" />
+      </label>
+      <button id="btnClear" class="danger">Clear All Data</button>
+    </div>
+    <div class="row" style="margin-top:8px;">
+      <div class="muted">Storage key: <code>echo_inventory_state_v454</code> • Movements columns: <code>timestamp,mode,sku,serial,qty,note,row,bin,warehouse,cost</code></div>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <button id="tabRemaining" class="tab-active">Remaining</button>
+    <button id="tabMovements">Movements (edit/delete)</button>
+  </div>
+
+  <div id="panelRemaining" class="group">
+    <h2 style="margin:0 0 8px 0;">Remaining</h2>
+    <div id="summary" class="muted"></div>
+    <table id="tblRemaining">
+      <thead>
+        <tr>
+          <th>SKU</th>
+          <th>Row</th>
+          <th>Bin</th>
+          <th>Warehouse</th>
+          <th>Cost</th>
+          <th>Total</th>
+          <th>Value</th>
+          <th>Adjust</th>
+          <th>Label</th>
+          <th>Serialized Count</th>
+          <th>Sample Serials (max 10)</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <div id="panelMovements" class="group hide">
+    <h2 style="margin:0 0 8px 0;">Movements (Newest first)</h2>
+    <div class="muted">Click 🗑️ to remove a posting. This immediately recomputes Remaining and updates totals.</div>
+    <table id="tblMoves">
+      <thead>
+        <tr>
+          <th>Delete</th>
+          <th>Time</th>
+          <th>Mode</th>
+          <th>SKU</th>
+          <th>Serial</th>
+          <th>Qty</th>
+          <th>Note</th>
+          <th>Row</th>
+          <th>Bin</th>
+          <th>Warehouse</th>
+          <th>Cost</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <script>
+    // ===== Echo Inventory v4.5.4 =====
+    const STATE_KEY = 'echo_inventory_state_v454';
+
+    const state = {
+      version: 'v4.5.4',
+      saved_at: null,
+      incoming: [],
+      outgoing: [],
+      remaining: {},
+      remMeta: {},   // { [sku]: { row:'', bin:'', warehouse:'', cost:'' } }
+      sticky: { row: '', bin: '', wh: '', note: '', lockLoc: true, lockNote: false }
+    };
+
+    const id = (x) => document.getElementById(x);
+
+    function money(num){
+      const n = +num || 0;
+      return n.toLocaleString(undefined, {style:'currency', currency:'USD'});
+    }
+    function parseMoney(v){
+      if (v == null || v === '') return '';
+      const num = parseFloat(String(v).replace(/[$,]/g,''));
+      if (isNaN(num)) return '';
+      return num.toFixed(2);
+    }
+
+    function setSaveBadge(ok, msg) {
+      const el = id('saveBadge');
+      el.textContent = ok ? (msg || 'Saved') : (msg || 'Save failed');
+      el.className = 'badge ' + (ok ? 'msg-ok' : 'msg-warn');
+      el.style.opacity = '1';
+      clearTimeout(setSaveBadge._t);
+      setSaveBadge._t = setTimeout(() => (el.style.opacity = '0.6'), 2000);
+    }
+    function showMsg(text) {
+      const m = id('msg');
+      m.textContent = text || '';
+      m.className = 'badge msg-warn';
+      m.style.opacity = '1';
+      clearTimeout(showMsg._t);
+      setTimeout(() => { m.style.opacity = '0'; m.textContent=''; }, 2500);
+    }
+
+    // ===== Remaining computation =====
+    function recomputeRemaining() {
+      const rem = {};
+      const add = (sku, serial, qty) => {
+        if (!sku) return;
+        if (!rem[sku]) rem[sku] = { total: 0, serialized: {} };
+        rem[sku].total += (qty || 0);
+        if (serial) {
+          if (qty > 0) rem[sku].serialized[serial] = true;
+          if (qty < 0) delete rem[sku].serialized[serial];
+        }
+      };
+      for (const r of state.incoming) add(r.sku, r.serial, +r.qty || 0);
+      for (const r of state.outgoing) add(r.sku, r.serial, -(+r.qty || 0));
+      for (const sku of Object.keys(rem)) rem[sku].total = Math.max(0, rem[sku].total);
+      state.remaining = rem;
+    }
+
+    function renderRemaining() {
+      const tb = document.querySelector('#tblRemaining tbody');
+      tb.innerHTML = '';
+      const entries = Object.entries(state.remaining).sort((a,b) => a[0].localeCompare(b[0]));
+      let totalSkus = entries.length;
+      let totalUnits = 0;
+      let totalValue = 0;
+      for (const [sku, info] of entries) {
+        const meta = state.remMeta[sku] || { row:'', bin:'', warehouse:'', cost:'' };
+        const cost = parseFloat(meta.cost || '0') || 0;
+        const value = cost * (info.total || 0);
+        totalUnits += (info.total || 0);
+        totalValue += value;
+
+        const tr = document.createElement('tr');
+        const serials = Object.keys(info.serialized || {});
+        const sample = serials.slice(0, 10).join(', ');
+        tr.innerHTML = `
+          <td>${escapeHtml(sku)}</td>
+          <td><input class="meta row" data-sku="${escapeAttr(sku)}" value="${escapeAttr(meta.row)}" placeholder="Row" /></td>
+          <td><input class="meta bin" data-sku="${escapeAttr(sku)}" value="${escapeAttr(meta.bin)}" placeholder="Bin" /></td>
+          <td><input class="meta warehouse" data-sku="${escapeAttr(sku)}" value="${escapeAttr(meta.warehouse)}" placeholder="Warehouse" /></td>
+          <td><input class="meta cost" data-sku="${escapeAttr(sku)}" value="${escapeAttr(meta.cost)}" placeholder="Cost" inputmode="decimal" /></td>
+          <td>${info.total || 0}</td>
+          <td>${money(value)}</td>
+          <td>
+            <div class="row" style="gap:6px;">
+              <input class="num-small adj" data-sku="${escapeAttr(sku)}" type="number" step="1" placeholder="+/-" />
+              <button class="btn-small adj-add" data-sku="${escapeAttr(sku)}">+=</button>
+              <button class="btn-small adj-set" data-sku="${escapeAttr(sku)}">Set</button>
+            </div>
+          </td>
+          <td><button class="btn-small print" data-sku="${escapeAttr(sku)}">Print Label</button></td>
+          <td>${serials.length}</td>
+          <td>${escapeHtml(sample)}</td>
+        `;
+        tb.appendChild(tr);
+      }
+      id('summary').textContent = `SKUs: ${totalSkus} • Units: ${totalUnits} • Value: ${money(totalValue)}`;
+
+      // Bind meta change handlers
+      document.querySelectorAll('input.meta').forEach(inp => {
+        inp.addEventListener('change', () => {
+          const sku = inp.getAttribute('data-sku');
+          const meta = state.remMeta[sku] || { row:'', bin:'', warehouse:'', cost:'' };
+          if (inp.classList.contains('row')) meta.row = inp.value;
+          if (inp.classList.contains('bin')) meta.bin = inp.value;
+          if (inp.classList.contains('warehouse')) meta.warehouse = inp.value;
+          if (inp.classList.contains('cost')) meta.cost = parseMoney(inp.value);
+          state.remMeta[sku] = meta;
+          saveState();
+          renderRemaining(); // refresh totals
+        });
+      });
+
+      // Bind print buttons
+      document.querySelectorAll('button.print').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const sku = btn.getAttribute('data-sku');
+          openLabelWindow(sku);
+        });
+      });
+
+      // Bind adjust buttons
+      document.querySelectorAll('button.adj-add').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const sku = btn.getAttribute('data-sku');
+          const val = getAdjValue(sku);
+          if (val === 0) return;
+          manualAdjustDelta(sku, val, 'Manual adjust +=');
+        });
+      });
+      document.querySelectorAll('button.adj-set').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const sku = btn.getAttribute('data-sku');
+          const desired = getAdjValue(sku);
+          const current = (state.remaining[sku]?.total) || 0;
+          const delta = desired - current;
+          if (delta === 0) return;
+          manualAdjustDelta(sku, delta, 'Manual adjust Set');
+        });
+      });
+    }
+
+    function getAdjValue(sku){
+      const inp = document.querySelector(`input.adj[data-sku="${cssEscape(sku)}"]`);
+      const v = parseInt(inp.value, 10);
+      return isNaN(v) ? 0 : v;
+    }
+    function cssEscape(s){ return s.replace(/"/g,'\\"'); }
+
+    function manualAdjustDelta(sku, delta, note){
+      const row = state.remMeta[sku] || {};
+      const base = {
+        sku, qty: Math.abs(delta), serial: undefined,
+        note: note, ts: Date.now(),
+        row: row.row || '', bin: row.bin || '', warehouse: row.warehouse || '',
+        cost: row.cost || ''
+      };
+      if (delta > 0) state.incoming.push({...base, mode:'incoming'});
+      else state.outgoing.push({...base, mode:'outgoing'});
+      recomputeRemaining(); renderRemaining(); saveState();
+    }
+
+    function escapeHtml(s) { if (s == null) return ''; return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+    function escapeAttr(s) { return (s == null) ? '' : String(s).replace(/"/g, '&quot;'); }
+
+    function saveState() {
+      try {
+        if (!state.remaining || !Object.keys(state.remaining).length) { recomputeRemaining(); }
+        state.saved_at = new Date().toISOString();
+        const payload = JSON.stringify(state);
+        localStorage.setItem(STATE_KEY, payload);
+        setSaveBadge(true, 'Saved');
+        return true;
+      } catch (e) { console.error('saveState error', e); setSaveBadge(false, 'Save failed'); return false; }
+    }
+    function loadState() {
+      try {
+        const raw = localStorage.getItem(STATE_KEY);
+        if (!raw) { setSaveBadge(false, 'Nothing to load'); renderRemaining(); return false; }
+        const data = JSON.parse(raw);
+        Object.assign(state, data);
+        // restore sticky inputs
+        id('locRow').value = state.sticky.row || '';
+        id('locBin').value = state.sticky.bin || '';
+        id('locWh').value  = state.sticky.wh  || '';
+        id('note').value   = state.sticky.note || '';
+        id('cbLockLoc').checked  = !!state.sticky.lockLoc;
+        id('cbLockNote').checked = !!state.sticky.lockNote;
+        renderRemaining(); renderMovements();
+        setSaveBadge(true, 'Loaded');
+        return true;
+      } catch (e) { console.error('loadState error', e); setSaveBadge(false, 'Load failed'); return false; }
+    }
+
+    function downloadBackupJSON() {
+      if (!saveState()) return;
+      const blob = new Blob([localStorage.getItem(STATE_KEY)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const ts = (new Date().toISOString()).replace(/[:.]/g, '-');
+      a.href = url; a.download = `Echo_Inventory_Backup_${ts}.json`; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+    }
+
+    async function restoreFromBackupFile(file) {
+      try {
+        const text = await file.text();
+        const data = JSON.parse(text);
+        if (!('incoming' in data) || !('outgoing' in data)) { showMsg('Invalid backup'); return; }
+        Object.assign(state, data);
+        localStorage.setItem(STATE_KEY, JSON.stringify(state));
+        loadState();
+        setSaveBadge(true, 'Restored');
+      } catch (e) { console.error('restoreFromBackupFile error', e); setSaveBadge(false, 'Restore failed'); }
+    }
+
+    function clearAllData() {
+      if (!confirm('Clear all local Echo Inventory data? This cannot be undone.')) return;
+      localStorage.removeItem(STATE_KEY);
+      state.incoming = []; state.outgoing = []; state.remaining = {}; state.remMeta = {};
+      state.sticky = { row:'', bin:'', wh:'', note:'', lockLoc:true, lockNote:false };
+      id('locRow').value=''; id('locBin').value=''; id('locWh').value=''; id('note').value='';
+      id('cbLockLoc').checked = true; id('cbLockNote').checked = false;
+      renderRemaining(); renderMovements(); setSaveBadge(true, 'Cleared');
+    }
+
+    // ===== CSV EXPORTS (fixed line endings) =====
+    function exportRemainingCSV() {
+      if (!state.remaining || !Object.keys(state.remaining).length) { showMsg('Nothing to export'); return; }
+      const header = ['SKU','Row','Bin','Warehouse','Cost','Total','Value','SerializedCount','Serials'];
+      const lines = [header.join(',')];
+      for (const [sku, info] of Object.entries(state.remaining)) {
+        const serials = Object.keys(info.serialized || {});
+        const meta = state.remMeta[sku] || { row:'', bin:'', warehouse:'', cost:'' };
+        const cost = parseFloat(meta.cost || '0') || 0;
+        const value = cost * (info.total || 0);
+        const row = [
+          csvEscape(sku),
+          csvEscape(meta.row || ''),
+          csvEscape(meta.bin || ''),
+          csvEscape(meta.warehouse || ''),
+          csvEscape(meta.cost || ''),
+          info.total || 0,
+          value.toFixed(2),
+          serials.length,
+          csvEscape(serials.join(' '))
+        ];
+        lines.push(row.join(','));
+      }
+      const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
+      triggerDownload(blob, 'Echo_Remaining.csv');
+    }
+    function exportMovementsCSV() {
+      const moves = getAllMovesNewestFirst();
+      if (!moves.length) { showMsg('No movements to export'); return; }
+      const header = ['timestamp','mode','sku','serial','qty','note','row','bin','warehouse','cost'];
+      const lines = [header.join(',')];
+      for (const r of moves) {
+        const row = [
+          csvEscape(new Date(r.ts || Date.now()).toISOString()),
+          csvEscape(r.mode),
+          csvEscape(r.sku),
+          csvEscape(r.serial || ''),
+          r.qty || 0,
+          csvEscape(r.note || ''),
+          csvEscape(r.row || ''),
+          csvEscape(r.bin || ''),
+          csvEscape(r.warehouse || ''),
+          csvEscape(r.cost || '')
+        ];
+        lines.push(row.join(','));
+      }
+      const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
+      triggerDownload(blob, 'Echo_Movements.csv');
+    }
+    function triggerDownload(blob, filename){
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = filename;
+      document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+    }
+    function csvEscape(val) { if (val == null) return ''; const s = String(val); if (/[",\n]/.test(s)) return '"' + s.replace(/"/g, '""') + '"'; return s; }
+
+    // ===== Posting helpers =====
+    function getFormRow() {
+      state.sticky.lockLoc = id('cbLockLoc').checked;
+      state.sticky.lockNote = id('cbLockNote').checked;
+      if (state.sticky.lockLoc) {
+        state.sticky.row = id('locRow').value;
+        state.sticky.bin = id('locBin').value;
+        state.sticky.wh  = id('locWh').value;
+      }
+      if (state.sticky.lockNote) {
+        state.sticky.note = id('note').value;
+      }
+      const sku = id('sku').value.trim();
+      const tracking = id('tracking').value;
+      const serialInput = id('serial').value.trim();
+      const serial = tracking === 'ser' ? (serialInput || undefined) : undefined;
+      const qty = parseInt(id('qty').value, 10) || 0;
+      const note = (state.sticky.lockNote ? state.sticky.note : id('note').value).trim();
+
+      const meta = state.remMeta[sku] || {};
+      const cost = meta.cost || '';
+      const row = state.sticky.row || '';
+      const bin = state.sticky.bin || '';
+      const warehouse = state.sticky.wh || '';
+
+      return { sku, serial, qty, note: note || undefined, ts: Date.now(), row, bin, warehouse, cost };
+    }
+    function applyStickyMetaToSKU(sku) {
+      if (!sku) return;
+      const meta = state.remMeta[sku] || { row:'', bin:'', warehouse:'', cost:'' };
+      if (state.sticky.row) meta.row = state.sticky.row;
+      if (state.sticky.bin) meta.bin = state.sticky.bin;
+      if (state.sticky.wh)  meta.warehouse = state.sticky.wh;
+      state.remMeta[sku] = meta;
+    }
+    function clearFormAfterPost() {
+      id('sku').value = ''; id('serial').value = '';
+      if (id('cbResetQty').checked) id('qty').value = 1;
+      if (!state.sticky.lockNote) id('note').value = '';
+      if (!state.sticky.lockLoc) { id('locRow').value=''; id('locBin').value=''; id('locWh').value=''; }
+      id('sku').focus();
+    }
+    function validateRow(row) {
+      if (!row.sku) { showMsg('Missing SKU'); return false; }
+      if (!row.qty) { showMsg('Missing Qty'); return false; }
+      if (id('tracking').value === 'ser' && !row.serial) { showMsg('Serial required in Serialized mode'); return false; }
+      return true;
+    }
+    function postIncoming(row) {
+      if (!validateRow(row)) return;
+      applyStickyMetaToSKU(row.sku);
+      state.incoming.push({...row, mode:'incoming'});
+      recomputeRemaining(); renderRemaining(); renderMovements(); saveState(); clearFormAfterPost();
+    }
+    function postOutgoing(row) {
+      if (!validateRow(row)) return;
+      applyStickyMetaToSKU(row.sku);
+      state.outgoing.push({...row, mode:'outgoing'});
+      recomputeRemaining(); renderRemaining(); renderMovements(); saveState(); clearFormAfterPost();
+    }
+    function postByMode() {
+      const row = getFormRow();
+      const mode = id('postMode').value;
+      if (mode === 'incoming') postIncoming(row); else postOutgoing(row);
+    }
+
+    // Key-based & Smart-Scan
+    function handleAdvance(e, current) {
+      const auto = id('cbAutoAdvance').checked;
+      const enterAsScan = id('cbEnterAsScan').checked;
+      if (auto && (e.key === 'Tab' || (enterAsScan && e.key === 'Enter'))) {
+        e.preventDefault();
+        const tracking = id('tracking').value;
+        if (current === 'sku') {
+          if (tracking === 'ser') { id('serial').focus(); id('serial').select(); }
+          else { if (id('autoPostRule').value === 'afterSku') { postByMode(); } else { id('qty').focus(); id('qty').select(); } }
+        } else if (current === 'serial') {
+          if (id('autoPostRule').value === 'afterSerial') { postByMode(); } else { id('qty').focus(); id('qty').select(); }
+        } else if (current === 'qty') {
+          id('note').focus(); id('note').select();
+        }
+      }
+    }
+    let skuDebounce=null, serDebounce=null;
+    id('sku').addEventListener('input', () => {
+      if (!id('cbSmartScanSKU').checked) return;
+      const tracking = id('tracking').value;
+      clearTimeout(skuDebounce);
+      skuDebounce = setTimeout(() => {
+        if (tracking === 'ser') { id('serial').focus(); id('serial').select(); }
+        else { if (id('autoPostRule').value === 'afterSku') postByMode(); else { id('qty').focus(); id('qty').select(); } }
+      }, 150);
+    });
+    id('serial').addEventListener('input', () => {
+      if (!id('cbSmartScanSER').checked) return;
+      clearTimeout(serDebounce);
+      serDebounce = setTimeout(() => {
+        if (id('autoPostRule').value === 'afterSerial') postByMode(); else { id('qty').focus(); id('qty').select(); }
+      }, 150);
+    });
+
+    // Cost importer (hardened)
+    id('fileImportCost').addEventListener('change', async (e) => {
+      const f = e.target.files?.[0]; if (!f) return;
+      try {
+        let text = await f.text();
+        // Remove UTF-8 BOM if present
+        if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+        const rows = parseCSV(text);
+        if (!rows.length) { showMsg('No rows'); return; }
+        const hasHeaders = rows.columns && rows.columns.length;
+        const headers = (rows.columns || []).map(h => h.toLowerCase().trim());
+        const skuKey = headers.find(h => h === 'sku') || null;
+        const costKey = headers.find(h => h === 'cost' || h === 'price' || h === 'unit_cost') || null;
+        if (!skuKey || !costKey) { showMsg('Need headers: sku and cost'); return; }
+
+        let applied = 0;
+        for (const r of rows.data) {
+          const sku = String(r[skuKey] || '').trim();
+          const cost = parseMoney(r[costKey] || '');
+          if (!sku || cost === '') continue;
+          if (!(sku in state.remMeta)) state.remMeta[sku] = { row:'', bin:'', warehouse:'', cost:'' };
+          state.remMeta[sku].cost = cost;
+          applied++;
+        }
+        saveState(); renderRemaining();
+        setSaveBadge(true, `Cost applied to ${applied} SKU(s)`);
+      } catch (err) {
+        console.error('Import error', err);
+        showMsg('Import failed');
+      } finally {
+        e.target.value='';
+      }
+    });
+
+    function parseCSV(text){
+      const lines = text.split(/\r?\n/).filter(l => l.trim() !== '');
+      if (!lines.length) return { columns: [], data: [] };
+      const headers = splitCSVLine(lines[0]).map(h => h.trim());
+      const data = [];
+      for (let i=1; i<lines.length; i++){
+        const cols = splitCSVLine(lines[i]);
+        if (cols.length === 1 && cols[0].trim() === '') continue;
+        const obj = {};
+        for (let j=0; j<headers.length; j++){ obj[headers[j]] = (cols[j] ?? '').trim(); }
+        data.push(obj);
+      }
+      return { columns: headers, data };
+    }
+    function splitCSVLine(line){
+      const out=[]; let cur=''; let inQ=false;
+      for (let i=0;i<line.length;i++){
+        const ch=line[i];
+        if (ch === '"'){
+          if (inQ && line[i+1] === '"'){ cur+='"'; i++; }
+          else inQ = !inQ;
+        } else if (ch === ',' && !inQ){
+          out.push(cur); cur='';
+        } else { cur+=ch; }
+      }
+      out.push(cur); return out;
+    }
+
+    // CSV + Backup buttons
+    id('btnSave').addEventListener('click', saveState);
+    id('btnLoad').addEventListener('click', loadState);
+    id('btnDownloadBackup').addEventListener('click', downloadBackupJSON);
+    id('btnExportCSV').addEventListener('click', exportRemainingCSV);
+    id('btnExportMoves').addEventListener('click', exportMovementsCSV);
+    document.querySelectorAll('label.pill')[0].addEventListener('click', () => id('fileRestore').click());
+    document.querySelectorAll('label.pill')[1].addEventListener('click', () => id('fileImportCost').click());
+    id('fileRestore').addEventListener('change', (e) => { const f = e.target.files?.[0]; if (f) restoreFromBackupFile(f); e.target.value=''; });
+
+    // Post & controls
+    id('btnPost').addEventListener('click', postByMode);
+    id('sku').addEventListener('keydown', (e) => handleAdvance(e, 'sku'));
+    id('serial').addEventListener('keydown', (e) => handleAdvance(e, 'serial'));
+    id('qty').addEventListener('keydown', (e) => handleAdvance(e, 'qty'));
+    id('note').addEventListener('keydown', (e) => handleAdvance(e, 'note'));
+
+    // Persist sticky UI changes
+    ['locRow','locBin','locWh','note','cbLockLoc','cbLockNote'].forEach(k => {
+      id(k).addEventListener('change', () => {
+        state.sticky.row  = id('locRow').value;
+        state.sticky.bin  = id('locBin').value;
+        state.sticky.wh   = id('locWh').value;
+        state.sticky.note = id('note').value;
+        state.sticky.lockLoc  = id('cbLockLoc').checked;
+        state.sticky.lockNote = id('cbLockNote').checked;
+        saveState();
+      });
+    });
+
+    // ===== Movements panel (delete support) =====
+    function getAllMovesNewestFirst(){
+      const inc = (state.incoming || []).map((r, i) => ({...r, __type:'incoming', __index:i}));
+      const out = (state.outgoing || []).map((r, i) => ({...r, __type:'outgoing', __index:i}));
+      const all = inc.concat(out);
+      all.sort((a,b) => (b.ts||0) - (a.ts||0));
+      return all;
+    }
+    function renderMovements(){
+      const tb = document.querySelector('#tblMoves tbody');
+      tb.innerHTML='';
+      const rows = getAllMovesNewestFirst();
+      for (const r of rows){
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td><button class="btn-small danger del-move" data-type="${r.__type}" data-index="${r.__index}">🗑️</button></td>
+          <td>${escapeHtml(new Date(r.ts||Date.now()).toLocaleString())}</td>
+          <td>${escapeHtml(r.mode||r.__type)}</td>
+          <td>${escapeHtml(r.sku||'')}</td>
+          <td>${escapeHtml(r.serial||'')}</td>
+          <td>${r.qty||0}</td>
+          <td>${escapeHtml(r.note||'')}</td>
+          <td>${escapeHtml(r.row||'')}</td>
+          <td>${escapeHtml(r.bin||'')}</td>
+          <td>${escapeHtml(r.warehouse||'')}</td>
+          <td>${escapeHtml(r.cost||'')}</td>
+        `;
+        tb.appendChild(tr);
+      }
+      tb.querySelectorAll('button.del-move').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const typ = btn.getAttribute('data-type');
+          const idx = parseInt(btn.getAttribute('data-index'), 10);
+          if (!confirm('Delete this posting?')) return;
+          if (typ === 'incoming') state.incoming.splice(idx,1);
+          else state.outgoing.splice(idx,1);
+          recomputeRemaining(); renderRemaining(); renderMovements(); saveState();
+        });
+      });
+    }
+
+    // Tabs
+    function showTab(tab){
+      id('panelRemaining').classList.toggle('hide', tab!=='remaining');
+      id('panelMovements').classList.toggle('hide', tab!=='movements');
+      id('tabRemaining').classList.toggle('tab-active', tab==='remaining');
+      id('tabMovements').classList.toggle('tab-active', tab==='movements');
+    }
+    id('tabRemaining').addEventListener('click', () => showTab('remaining'));
+    id('tabMovements').addEventListener('click', () => { renderMovements(); showTab('movements'); });
+
+    // Init
+    loadState();
+    id('sku').focus();
+
+    // ===== Lightweight barcode window (Code 39) =====
+    function openLabelWindow(sku){
+      const labelHTML = `<!doctype html><html><head><meta charset="utf-8"><title>Print ${sku}</title>
+      <style>
+        :root { --label-w: 4in; --label-h: 5in; --gap: 0.25in; }
+        body { font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial; margin: 16px; }
+        #preview { display:grid; grid-template-columns: var(--label-w) var(--label-w); gap: var(--gap); }
+        .label { width: var(--label-w); height: var(--label-h); border: 1px dashed #ddd; padding: 0.25in; box-sizing: border-box; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px; }
+        .skutext { font-size: 14pt; letter-spacing: 1px; }
+        .controls { display:flex; gap:12px; align-items:center; margin-bottom:12px; }
+        select, input, button { padding:6px 8px; font-size:13px; }
+        @media print { .controls { display:none; } .label { border:none; } @page { size: letter portrait; margin:0.25in; } }
+        .mode-4x6 #preview { grid-template-columns: 1fr; }
+        .mode-4x6 :root { --label-w: 4in; --label-h: 6in; }
+        .mode-4x6 @media print { @page { size: 4in 6in; margin:0.1in; } }
+      
+    /* --- Mobile/touch tweaks --- */
+    input, select, button { font-size: 16px; } /* prevents iOS auto-zoom */
+    button { padding: 10px 12px; }
+    .group { border-radius: 12px; }
+    @media (max-width: 520px){
+      body { margin: 12px; }
+      h1 { font-size: 22px; margin-top: 4px; }
+      th, td { padding: 6px; }
+      .num-small { width: 84px; }
+      .tabs { position: sticky; top: 0; background: #fff; padding: 6px 0; z-index: 5; }
+      .group { padding: 10px; }
+      .right { margin-left: 0; }
+    }
+
+</style></head><body>
+        <div class="controls">
+          <label>Layout
+            <select id="layout">
+              <option value="4up" selected>4 per Letter</option>
+              <option value="4x6">Single 4×6</option>
+            </select>
+          </label>
+          <label>Copies <input id="copies" type="number" min="1" step="1" value="4" style="width:80px"></label>
+          <label>Height <input id="bh" type="number" min="30" max="200" step="1" value="120" style="width:80px"></label>
+          <label>Narrow bar <input id="nbw" type="number" min="1" max="6" step="1" value="2" style="width:80px"></label>
+          <button id="go">Generate</button>
+          <button onclick="window.print()">Print</button>
+        </div>
+        <div id="preview"></div>
+        <script>
+          const SKU = ${JSON.stringify(sku)};
+          const CODE39_MAP = {
+            '0': 'nnnwwnwnw','1': 'wnnwnnnnw','2': 'nnwwnnnnw','3': 'wnwwnnnnn','4': 'nnnwwnnnw','5': 'wnnwwnnnn','6': 'nnwwwnnnn','7': 'nnnwnnwnw','8': 'wnnwnnwnn','9': 'nnwwnnwnn',
+            'A': 'wnnnnwnnw','B': 'nnwnnwnnw','C': 'wnwnnwnnn','D': 'nnnnwwnnw','E': 'wnnnwwnnn','F': 'nnwnwwnnn','G': 'nnnnnwwnw','H': 'wnnnnwwnn','I': 'nnwnnwwnn','J': 'nnnnwwwnn',
+            'K': 'wnnnnnnww','L': 'nnwnnnnww','M': 'wnwnnnnwn','N': 'nnnnwnnww','O': 'wnnnwnnwn','P': 'nnwnwnnwn','Q': 'nnnnnnwww','R': 'wnnnnnwwn','S': 'nnwnnnwwn','T': 'nnnnwnwwn',
+            'U': 'wwnnnnnnw','V': 'nwwnnnnnw','W': 'wwwnnnnnn','X': 'nwnnwnnnw','Y': 'wwnnwnnnn','Z': 'nwwnwnnnn','-': 'nwnnnnwnw','.': 'wwnnnnwnn',' ': 'nwwnnnwnn','$': 'nwnwnwnnn',
+            '/': 'nwnwnnnwn','+': 'nwnnnwnwn','%': 'nnnwnwnwn','*': 'nwnnwnwnn'
+          };
+          function toCode39(text){
+            text = text.trim().toUpperCase();
+            for (const ch of text){ if (!(ch in CODE39_MAP)) return null; }
+            return ['*', ...text.split(''), '*'].map(ch => CODE39_MAP[ch]).join('n');
+          }
+          function drawSVG(code, opts){
+            const {height=120, n=2} = opts; const wide = n*3;
+            let x=0, isBar=true; const bars=[];
+            for (const c of code){ const w=(c==='w'?wide:n); if(isBar){ bars.push({x,w}); } x+=w; isBar=!isBar; }
+            const svg = document.createElementNS('http://www.w3.org/2000/svg','svg');
+            svg.setAttribute('width', x); svg.setAttribute('height', height); svg.setAttribute('viewBox', '0 0 '+x+' '+height);
+            for (const b of bars){ const r = document.createElementNS('http://www.w3.org/2000/svg','rect'); r.setAttribute('x', b.x); r.setAttribute('y', 0); r.setAttribute('width', b.w); r.setAttribute('height', height); r.setAttribute('fill', '#000'); svg.appendChild(r); }
+            return svg;
+          }
+          function render(){
+            const layout = document.getElementById('layout').value;
+            const copies = Math.max(1, parseInt(document.getElementById('copies').value||'4',10));
+            const bh = Math.max(30, parseInt(document.getElementById('bh').value||'120',10));
+            const nbw = Math.max(1, parseInt(document.getElementById('nbw').value||'2',10));
+            document.body.classList.toggle('mode-4x6', layout==='4x6');
+            const ptn = toCode39(SKU); const holder = document.getElementById('preview'); holder.innerHTML='';
+            for (let i=0;i<copies;i++){ const d=document.createElement('div'); d.className='label'; const s=drawSVG(ptn,{height:bh,n:nbw}); const t=document.createElement('div'); t.className='skutext'; t.textContent=SKU; d.appendChild(s); d.appendChild(t); holder.appendChild(d); }
+          }
+          document.getElementById('go').addEventListener('click', render);
+          render();
+        <\/script>
+      </body></html>`;
+      const w = window.open('', '_blank');
+      w.document.open(); w.document.write(labelHTML); w.document.close();
+    }
+
+    // ===== PWA: Service Worker registration =====
+    (function(){
+      if (!('serviceWorker' in navigator)) return;
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js').catch(err => console.warn('SW register failed', err));
+      });
+    })();
+
+  </script>
+</body>
+</html>
