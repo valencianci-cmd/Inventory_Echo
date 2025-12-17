@@ -218,6 +218,26 @@ if (IS_IOS && IS_TOUCH) {
     if (enterScan) enterScan.checked = false;
   });
 }
+// ===== Scanner burst detection (CR = move fields) =====
+let scanBurst = 0;
+let lastCharTs = 0;
+let scannerLikely = false;
+let scannerTimer = null;
+
+function markScannerChar() {
+  const now = Date.now();
+  scanBurst = (now - lastCharTs < 60) ? scanBurst + 1 : 1;
+  lastCharTs = now;
+
+  if (scanBurst >= 3) {
+    scannerLikely = true;
+    clearTimeout(scannerTimer);
+    scannerTimer = setTimeout(() => {
+      scannerLikely = false;
+      scanBurst = 0;
+    }, 800);
+  }
+}
 
     // ===== Echo Inventory v4.5.4 =====
     const STATE_KEY = 'echo_inventory_state_v454';
@@ -679,8 +699,43 @@ if (IS_IOS && IS_TOUCH) {
 
     // Post & controls
     id('btnPost').addEventListener('click', postByMode);
-    id('sku').addEventListener('keydown', (e) => handleAdvance(e, 'sku'));
-    id('serial').addEventListener('keydown', (e) => handleAdvance(e, 'serial'));
+id('btnPost').addEventListener('click', postByMode);
+
+id('sku').addEventListener('keydown', (e) => {
+  if (e.key && e.key.length === 1) markScannerChar();
+
+  if (e.key === 'Enter' && scannerLikely) {
+    e.preventDefault();
+
+    if (id('tracking').value === 'ser') {
+      id('serial').focus();
+      if (!IS_IOS) id('serial').select();
+    } else {
+      id('qty').focus();
+      if (!IS_IOS) id('qty').select();
+    }
+    return;
+  }
+
+  handleAdvance(e, 'sku');
+});
+
+id('serial').addEventListener('keydown', (e) => {
+  if (e.key && e.key.length === 1) markScannerChar();
+
+  if (e.key === 'Enter' && scannerLikely) {
+    e.preventDefault();
+    id('qty').focus();
+    if (!IS_IOS) id('qty').select();
+    return;
+  }
+
+  handleAdvance(e, 'serial');
+});
+
+id('qty').addEventListener('keydown', (e) => handleAdvance(e, 'qty'));
+id('note').addEventListener('keydown', (e) => handleAdvance(e, 'note'));
+
     id('qty').addEventListener('keydown', (e) => handleAdvance(e, 'qty'));
     id('note').addEventListener('keydown', (e) => handleAdvance(e, 'note'));
 
