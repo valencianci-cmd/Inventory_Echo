@@ -701,7 +701,7 @@ function markScannerChar() {
 
     // Post & controls
     id('btnPost').addEventListener('click', postByMode);
-id('btnPost').addEventListener('click', postByMode);
+
 
 id('sku').addEventListener('keydown', (e) => {
   if (e.key && e.key.length === 1) markScannerChar();
@@ -719,7 +719,7 @@ id('sku').addEventListener('keydown', (e) => {
     return;
   }
 
-  handleAdvance(e, 'sku');
+  if (!scannerLikely) handleAdvance(e, 'sku');
 });
 
 id('serial').addEventListener('keydown', (e) => {
